@@ -1,8 +1,7 @@
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.DataFormatter;
-import org.apache.poi.ss.usermodel.FormulaEvaluator;
-import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellUtil;
+import org.apache.poi.ss.util.NumberToTextConverter;
 import org.apache.poi.xssf.usermodel.XSSFFormulaEvaluator;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -11,67 +10,118 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.*;
+import javax.swing.*;
 
 public class ExcelToJava {
     public static void main(String[] args) throws IOException {
         StringBuilder input=new StringBuilder();
-        String tablename=null;
+        String tablename = "";
+        XSSFWorkbook workbook;
+        File target;
         try{
-            FileInputStream file = new FileInputStream(new File("C:\\Users\\st1\\Desktop\\MT910toPOI.xlsx"));
-            XSSFWorkbook workbook = new XSSFWorkbook(file);
-//            DataFormatter ;
-//            FormulaEvaluator;
-            XSSFSheet sheet = workbook.getSheet("MT910");
-            tablename=sheet.getSheetName();
-            input.append("public class "+tablename+" extends MTMessage{")
-                    .append("\n");
-            input.append("public "+tablename+"() {")
-                    .append("\n")
-                    .append("this.messageType = this.getClass();")
-                    .append("\n")
-                    .append("}")
-                    .append("\n");
-            for (Row a : sheet) {
-                //System.out.println(a);
-                if (a.getRowNum() == 0) {
-                    continue;
-                }
-                        input.append("@Presence(" + cellJudge(a.getCell(4)) + ")");
-                        input.append("\n");
+            String pathName =args[0];
+            //String pathName ="C:\\Users\\st1\\Desktop\\新增資料夾 (4)";
+            File dirFile=new File(pathName);
+            if(!dirFile.exists()){
+                System.out.println("Directory does not exist!");
+                return;
+            }
+            if(!dirFile.isDirectory()){
+                System.out.println("Please input a Directory path!");
+                return;
+            }
+            //下面這行是獲取目錄下所有的檔案名和目錄名
+            String[] filelist= dirFile.list();
+            for(int z=0;z<filelist.length;z++) {
+                if(filelist[z].contains(".")) {
+                    String fileType = filelist[z].substring(filelist[z].lastIndexOf(".")+1);
+                    if ("XLS".equalsIgnoreCase(fileType) || "XLSX".equalsIgnoreCase(fileType)) {
+                        target = new File(dirFile.getPath(), filelist[z]);
+                        //System.out.println(target.getName());
+                        FileInputStream file = new FileInputStream(target);
+                        workbook = new XSSFWorkbook(file);
+                        XSSFSheet sheet = workbook.getSheet(target.getName().substring(0, target.getName().lastIndexOf(".")));
+                        tablename = sheet.getSheetName();
+                        input.append("public class " + tablename + " extends MTMessage{")
+                                .append("\n\n");
+                        input.append("public " + tablename + "() {")
+                                .append("\n")
+                                .append("this.messageType = this.getClass();")
+                                .append("\n")
+                                .append("}")
+                                .append("\n\n");
+                        for (Row a : sheet) {
+                            if (a.getRowNum() == 0) {
+                                continue;
+                            }
+                            if(cellJudge(file,a.getCell(4)).equals("Mandatory") || cellJudge(file,a.getCell(4)).equals("Optional")) {
+                                input.append("@Presence(PresenceType." + cellJudge(file, a.getCell(4)) + ")");
+                                input.append("\n");
+                            }else if(cellJudge(file,a.getCell(4)).equals("M")) {
+                                input.append("@Presence(PresenceType.Mandatory)");
+                                input.append("\n");
+                            }else if(cellJudge(file,a.getCell(4)).equals("O")) {
+                                input.append("@Presence(PresenceType.Optional)");
+                                input.append("\n");
+                            }
 
-                        input.append("@ColumnId(" + cellJudge(a.getCell(0)) + ")");
-                        input.append("\n");
-
-                    for(int i=5;i<=16;i++){
-                        if(cellJudge(a.getCell(i))!=""){
-                            input.append("@"+sheet.getRow(0).getCell(i).toString()+"("+a.getCell(i).toString()+")");
+                            input.append("@ColumnId("+"\""+ cellJudge(file,a.getCell(0))+"\""+ ")");
                             input.append("\n");
+
+                            for (int i = 5; i <= 16; i++) {
+                                if (cellJudge(file,a.getCell(i)) != "") {
+                                    String tagName=sheet.getRow(0).getCell(i).toString();
+                                    if(i==9 || i==12 || i==16 ){
+                                        input.append("@" + tagName.substring(0, tagName.indexOf("\n"))+ "(" +"\""+cellJudge(file,a.getCell(i))+"\"" + ")");
+                                        input.append("\n");
+                                    } else if(i==10 || i==11){
+                                        input.append("@" + tagName.substring(0, tagName.indexOf("\n"))+ "(" +"literal = \""+cellJudge(file,a.getCell(i))+"\"" + ")");
+                                        input.append("\n");
+                                    } else if (i==8) {
+                                        input.append("@" + tagName.substring(0, tagName.indexOf("\n"))+ "(" +"pos = "+cellJudge(file,a.getCell(i))+")");
+                                        input.append("\n");
+                                    } else {
+                                        input.append("@" + tagName.substring(0, tagName.indexOf("\n")) + "(" + cellJudge(file, a.getCell(i)) + ")");
+                                        input.append("\n");
+                                    }
+                                }
+                            }
+
+                            if(cellJudge(file,a.getCell(3)).contains("List")){
+                                input.append("@ListItemType(" + cellJudge(file, a.getCell(3)).substring(a.getCell(3).toString().indexOf("<")+1,a.getCell(3).toString().indexOf(">")) + ".class)");
+                                input.append("\n");
+                            }
+
+                            if (cellJudge(file,a.getCell(3)).equals("List<String>")) {
+                                input.append("protected " + cellJudge(file,a.getCell(3)) + " col" + cellJudge(file,a.getCell(0)) + toCamelcase(cellJudge(file,a.getCell(1))) + " = new ArrayList<>();");
+                                input.append("\n");
+                            } else {
+                                input.append("protected " + cellJudge(file,a.getCell(3)) + " col" + cellJudge(file,a.getCell(0)) + toCamelcase(cellJudge(file,a.getCell(1))) + ";");
+                                input.append("\n");
+                            }
+
+                            input.append("public " + cellJudge(file,a.getCell(3)) + " get" + cellJudge(file,a.getCell(0)) + toCamelcase(cellJudge(file,a.getCell(1))) + "() {");
+                            input.append("\n");
+
+                            if (cellJudge(file,a.getCell(3)).equals("List<String>")) {
+                                input.append("\treturn Collections.unmodifiableList(col" + cellJudge(file,a.getCell(0)) + toCamelcase(cellJudge(file,a.getCell(1)))+");");
+                                input.append("\n");
+                                input.append("}");
+                                input.append("\n\n");
+                            } else {
+                                input.append("\treturn col" + cellJudge(file,a.getCell(0)) + toCamelcase(cellJudge(file,a.getCell(1))) + ";");
+                                input.append("\n");
+                                input.append("}");
+                                input.append("\n\n");
+                            }
+
                         }
                     }
-
-                        if (cellJudge(a.getCell(3)).equals("List<String>")) {
-                            input.append("protected " + cellJudge(a.getCell(3)) + " col" + cellJudge(a.getCell(0)) + "_" + toCamelcase(cellJudge(a.getCell(1))) + " = new ArrayList<>();");
-                            input.append("\n");
-                        } else {
-                            input.append("protected " + cellJudge(a.getCell(3)) + " col" + cellJudge(a.getCell(0)) + "_" + toCamelcase(cellJudge(a.getCell(1))) + ";");
-                            input.append("\n");
-                        }
-
-                        input.append("public " + cellJudge(a.getCell(3)) + " get" + cellJudge(a.getCell(0)) + "_" + toCamelcase(cellJudge(a.getCell(1))) + "() {");
-                        input.append("\n");
-
-                        if (cellJudge(a.getCell(3)).equals("List<String>")) {
-                            input.append("return Collections.unmodifiableList(col" + cellJudge(a.getCell(0)) + "_" + toCamelcase(cellJudge(a.getCell(1))));
-                            input.append("\n");
-                            input.append("}");
-                            input.append("\n");
-                        } else {
-                            input.append("return col" + cellJudge(a.getCell(0)) + "_" + toCamelcase(cellJudge(a.getCell(1))) + ";");
-                            input.append("\n");
-                            input.append("}");
-                            input.append("\n");
-                        }
-
+                }else {
+                    continue;
+                }
             }
         }catch (Exception e){
             e.printStackTrace();
@@ -83,12 +133,21 @@ public class ExcelToJava {
         result.close();
     }
 
-    private static String cellJudge(Cell x){
+    private static String cellJudge(FileInputStream in,Cell x) throws IOException {
+        String result="";
         if(x==null){
             return "";
-        }else{
-            return x.toString();
+        }else if(x.getCellType().equals(CellType.NUMERIC)){
+            result= NumberToTextConverter.toText(x.getNumericCellValue());
+        }else if(x.getCellType().equals(CellType.FORMULA)){
+            DataFormatter df=new DataFormatter();
+            XSSFWorkbook workbook = new XSSFWorkbook(in);
+            FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
+            result = df.formatCellValue(x, evaluator);
+        }else {
+            result=x.toString();
         }
+        return result;
     }
 
 

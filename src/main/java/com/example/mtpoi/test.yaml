@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: 測試API
+  description: 對外開放能力
+  version: 1.0.0
+  contact:
+    name: Abow
+    email: mike79.tseng@gmail.com
+servers:
+  - url: 'http://localhost:8080'
+tags:
+- name : user
+  description: 用戶
+- name : student
+  description: 學生
+
+paths:
+  /user/{id}:
+    get:
+      tags:
+        - user
+
+  
